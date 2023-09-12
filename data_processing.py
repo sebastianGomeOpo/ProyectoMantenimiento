@@ -117,6 +117,68 @@ def set_column_dtypes(data, column_type_mapping):
 # Funciones de Manipulación de DataFrames
 # -------------------------
 
+def inmovilizadosConverted(df_inmovilizados, df_criticos):
+    """
+    Procesa un DataFrame de acuerdo a las especificaciones dadas:
+    - Elimina el nombre de las columnas y lo transforma en una fila.
+    - Elimina las dos primeras filas.
+    - Establece la tercera fila como encabezados.
+    - Conserva solo las columnas deseadas.
+    - Restablece el índice.
+    - Busca coincidencias con df_criticos y etiqueta como "CRITICO" o "NO CRITICO".
+    - Calcula días inmovilizados.
+    - Calcula la deducción y el saldo.
+    """
+    
+    # Mover los nombres de las columnas a una fila en el DataFrame
+    df_inmovilizados.columns = range(df_inmovilizados.shape[1])
+    df_inmovilizados = df_inmovilizados.reset_index(drop=True)
+
+    # Eliminar las dos primeras filas
+    df_inmovilizados = df_inmovilizados.iloc[1:]
+
+    # Establecer la tercera fila (ahora la primera fila) como encabezados
+    df_inmovilizados.columns = df_inmovilizados.iloc[0]
+    df_inmovilizados = df_inmovilizados.iloc[1:]
+    
+    # Conservar solo las columnas deseadas
+    desired_columns = ['Material', 'Descripcion', 'Valor stock', 'Moneda', 'Stock', 'AREA', 'PEDIDO POR', 
+                       'RESPONSABLE', 'OBSERVACIONES', 'Und', 'Últ.entr.', ' Últ.mov.', 'Tipo de Repuesto']
+    df_inmovilizados = df_inmovilizados[desired_columns]
+    
+    # Restablecer el índice
+    df_inmovilizados.reset_index(drop=True, inplace=True)
+    
+    # Buscar coincidencias y etiquetar como "CRITICO" o "NO CRITICO"
+    buscador = CoincidenciaBuscadorFinal(df_inmovilizados, df_criticos)
+    df_inmovilizados = buscador.buscar_coincidencia("Material", "Código SAP.", "CRITICO", "Tipo de repuesto", None)
+    df_inmovilizados["Tipo de repuesto"].replace("", "NO CRITICO", inplace=True)
+    
+    # Convertir 'Últ.mov.' a datetime y calcular días inmovilizados
+    df_inmovilizados[' Últ.mov.'] = pd.to_datetime(df_inmovilizados[' Últ.mov.'])
+    df_inmovilizados['Dias Inmovilizados'] = (pd.Timestamp.now() - df_inmovilizados[' Últ.mov.']).dt.days
+    
+    # Define la función que calcula la tasa basada en los días inmovilizados
+    def get_tasa(days):
+        if 180 <= days <= 360:
+            return 0.5
+        elif 361 <= days <= 720:
+            return 0.6
+        elif days > 720:
+            return 1
+        return 0
+    
+    # Calcular deducción y saldo
+    mask_no_critico = df_inmovilizados["Tipo de Repuesto"] == "NO CRITICO"
+    df_inmovilizados.loc[mask_no_critico, "Deducción"] = df_inmovilizados.loc[mask_no_critico, "Dias Inmovilizados"].apply(get_tasa) * df_inmovilizados.loc[mask_no_critico, "Valor stock"].astype(float)
+    df_inmovilizados["SALDO"] = df_inmovilizados["Valor stock"].astype(float) - df_inmovilizados["Deducción"]
+    
+    # Etiquetar como 'inmovilizado' si los días inmovilizados son >= 180 y el tipo de repuesto es "NO CRITICO"
+    condition = (df_inmovilizados["Dias Inmovilizados"] >= 180) & (df_inmovilizados["Tipo de repuesto"] == "NO CRITICO")
+    df_inmovilizados["Estado Inmovilizado"] = np.where(condition, "inmovilizado", "")
+    return df_inmovilizados
+
+
 def process_MCBE(df):
     """
     Procesa el DataFrame asociado al archivo MCBE.
@@ -487,7 +549,37 @@ def vectorized_convertir_moneda(df):
     """Vectorized version of convertir_moneda."""
     return df['Precio neto'] / df['Tipo de Cambio']
 
+class CoincidenciaBuscadorFinal:
+    def __init__(self, dataset_entrada, dataset_busqueda):
+        self.dataset_entrada = dataset_entrada
+        self.dataset_busqueda = dataset_busqueda
 
+    def buscar_coincidencia(self, columna_a_buscar, columna_busqueda, valor_coincidencia, 
+                            nombre_columna_resultado="Resultado", nombre_columna_busqueda=None):
+        # Si no se especifica un nombre para la columna de búsqueda en el resultado, se usa el mismo nombre que columna_busqueda
+        if not nombre_columna_busqueda:
+            nombre_columna_busqueda = columna_busqueda
+        
+        # Convertir las columnas a tipo string
+        self.dataset_entrada[columna_a_buscar] = self.dataset_entrada[columna_a_buscar].astype(str)
+        self.dataset_busqueda[columna_busqueda] = self.dataset_busqueda[columna_busqueda].astype(str)
+        
+        # Cambiamos el nombre de la columna de búsqueda para el merge
+        df_busqueda_renombrado = self.dataset_busqueda.rename(columns={columna_busqueda: nombre_columna_busqueda})
+        
+        # Utilizamos un merge left para buscar coincidencias
+        resultado = pd.merge(self.dataset_entrada, df_busqueda_renombrado[[nombre_columna_busqueda]], 
+                             left_on=columna_a_buscar, right_on=nombre_columna_busqueda, 
+                             how='left', indicator=True)
+        
+        # Si la columna '_merge' es 'both', entonces hubo coincidencia
+        resultado[nombre_columna_resultado] = (resultado['_merge'] == 'both').astype(str).replace({'True': valor_coincidencia, 'False': ''})
+        
+        # Eliminamos las columnas extra
+        resultado.drop(['_merge'], axis=1, inplace=True)
+        return resultado
+
+    
 def sort_and_remove_duplicates(data, columns_to_sort, duplicate_check_column):
     """
     Ordena un DataFrame y elimina filas duplicadas según una columna específica.
@@ -518,8 +610,7 @@ def process_material(value):
     # Si no, simplemente regresa el valor original
     return str(value)
 
-
-def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE):
+def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE,df_inmovilizados,df_criticos):
     """Prepara DataFrames para las operaciones de join."""
     column_types = {
         'Fecha de solicitud': 'datetime64[ns]',
@@ -553,9 +644,8 @@ def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_
     df_ZMB52['Material'] = df_ZMB52['Material'].apply(process_material)
     df_ME5A['Material'] = df_ME5A['Material'].apply(process_material)
 
-    # Devuelve df_MCBE también:
-    return df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_ZMM621_fechaHES_HEM
-
+    df_inmovilizados_converted = inmovilizadosConverted(df_inmovilizados,df_criticos)
+    return df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_inmovilizados_converted, df_ZMM621_fechaHES_HEM
 
 def create_ZMM621_COMODIN_OC_unique(df_ZMM621_fechaAprobacion):
     """
@@ -584,7 +674,20 @@ def create_ZMM621_Orden_unique(df_ZMM621_fechaAprobacion):
 def check_columns_existence(df, columns):
     for col in columns:
         if col not in df.columns:
+            print("DataFrame causing the issue:", df.head())  # print the top rows of the problematic DataFrame
             raise KeyError(f"Column {col} not found in DataFrame!")
+            
+# def buscar_coincidencia(dataset_entrada, dataset_busqueda, columna_busqueda, columna_a_buscar, valor_coincidencia):
+#     # Obtener los valores de búsqueda del dataset de búsqueda
+#     valores_busqueda = dataset_busqueda[columna_busqueda]
+
+#     # Buscar si hay coincidencias en el dataset de entrada
+#     coincidencias = np.isin(dataset_entrada[columna_a_buscar], valores_busqueda)
+
+#     # Devolver el valor de coincidencia cuando se encuentre una coincidencia
+#     dataset_entrada['Resultado'] = np.where(coincidencias, valor_coincidencia, '')
+
+#     return dataset_entrada
             
 def merge_dataframes(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_ZMM621_fechaHES_HEM,
                      df_tipos_cambio):
@@ -699,29 +802,55 @@ def costoComprasPorRetirar(df):
     # Hacemos un left join entre el df original y df_latest para agregar la columna "Precio Unitario" al df original
     df = pd.merge(df, df_latest[['Descripcion Material', 'Precio Unitario']], on='Descripcion Material', how='left')
     # Hacemos el cálculo de Costo compras por retirar con la nueva columna "Precio Unitario"
-    df['Costo compras por retirar'] = df['Precio Unitario'] * df['Libre utilización']
+    df['Costo compras por retirar'] = np.where(df['TIPO COMPROMETIDO SUGERENCIA']=='COMPRA POR RETIRAR',df['Precio Unitario'] * df['Libre utilización'],'')
     return df
 
 
 # -------------------------
 # Función Principal de Procesamiento
 # -------------------------
-def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_criticos,
-                 df_inmovilizados, df_tipos_cambio):
-    # Prepare data for joining
-    df_ME5A_converted, df_ZMM621_fechaAprobacion_converted, df_IW38_converted, df_ME2N_OC_converted, df_ZMB52_converted, df_MCBE_converted, df_ZMM621_fechaHES_HEM_converted = process_dataframes_for_join(
-        df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE)
+def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_criticos, df_inmovilizados, df_tipos_cambio):
+    
+    processed_dataframes = process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_inmovilizados, df_criticos)
+    
+    ###############
+    # dataframe_labels = [
+    #   "df_ME5A", "df_ZMM621_fechaAprobacion", "df_IW38", "df_ME2N_OC", 
+    #   "df_ZMB52", "df_MCBE", "df_inmovilizados_converted", "df_ZMM621_fechaHES_HEM_converted"
+    #]
+
+    # Mostrar el orden de los DataFrames
+    #for index, label in enumerate(dataframe_labels):
+    #   print(f"{index}: {label}")
+    
+    ###############
+    # Cuando necesites acceder a un DataFrame específico, usa su índice
+    df_ME5A_converted = processed_dataframes[0]
+    df_ZMM621_fechaAprobacion_converted = processed_dataframes[1]
+    df_IW38_converted = processed_dataframes[2]
+    df_ME2N_OC_converted = processed_dataframes[3]
+    df_ZMB52_converted = processed_dataframes[4]
+    df_MCBE_converted = processed_dataframes[5]
+    df_inmovilizados_converted = processed_dataframes[6]
+    df_ZMM621_fechaHES_HEM_converted = processed_dataframes[7]
+    
+    #print("Headers for df_ME5A_converted:", df_ME5A_converted.columns)
+    #print("Headers for df_ZMM621_fechaAprobacion_converted:", df_ZMM621_fechaAprobacion_converted.columns)
+    #print("Headers for df_ME2N_converted:", df_ME2N_OC_converted.columns)
+    
+    
     # Merge the dataframes
     joined_data = merge_dataframes(df_ME5A_converted, df_ZMM621_fechaAprobacion_converted, df_IW38_converted,
                                    df_ME2N_OC_converted, df_ZMB52_converted, df_MCBE_converted,
                                    df_ZMM621_fechaHES_HEM_converted, df_tipos_cambio)
 
+    
     # Refine the merged data
     joined_data = refine_joined_data(joined_data)
 
     # Calculate additional columns
     joined_data = calculate_additional_columns(joined_data, df_tipos_cambio)
-
+    
     column_order = [
         'COMODIN OC', 'COMODIN SOLPED', 'Ind.liberación', 'TIPO', 'SOLICITANTE', 'Pto.tbjo.responsable',
         'FECHA COMODIN - CONTABLE O SOLPED', 'Estado HES/HEM', 'Fecha de reg. Factura', 'Estado factura',
@@ -741,5 +870,10 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
     joined_data = joined_data[column_order]
 
     joined_data = costoComprasPorRetirar(joined_data)
-
+    
+    
+    buscadorCriticos = CoincidenciaBuscadorFinal(joined_data, df_criticos)
+    joined_data = buscadorCriticos.buscar_coincidencia('Material','Código SAP.','Critico', 
+                                                        'Material Critico?')
+    joined_data = left_join(joined_data, df_inmovilizados_converted, 'Material', ['Estado Inmovilizado','Dias Inmovilizados'])
     return joined_data

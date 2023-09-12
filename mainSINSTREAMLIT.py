@@ -26,6 +26,7 @@ def process_uploaded_files(files):
     
     result = process_data(dfs["ME5A_ComodinCreated"], dfs["ZMM621_ComodinCreated"], dfs["IW38"], dfs["ME2N_ComodinCreated"], dfs["ZMB52"], dfs["MCBE"], dfs["criticos"], dfs["inmovilizados"], dfs["tipos_cambio"])
     return result
+
 def main(files):
     result = process_uploaded_files(files)
     # Guardar el resultado en un archivo Excel
@@ -36,15 +37,15 @@ def main(files):
 if __name__ == "__main__":
     # List of file paths for testing purposes
     files = [
-        "ME5A SOLPEDS.xlsx",
-        "ZMM621 FECHA APROBACION.xlsx",
-        "IW38.xlsx",
-        "ME2N OC.xlsx",
-        "ZMB52 STOCK.xlsx",
-        "MCBE.xlsx",
-        "CRITICOS.xlsx",
-        "INMOVILIZADOS.xlsx",  
-        "PEN to USD.csv",
-        "USD to EUR .csv"
+        "../ME5A SOLPEDS.xlsx",
+        "../ZMM621 FECHA APROBACION.xlsx",
+        "../IW38.xlsx",
+        "../ME2N OC.xlsx",
+        "../ZMB52 STOCK.xlsx",
+        "../MCBE.xlsx",
+        "../CRITICOS.xlsx",
+        "../INMOVILIZADOS.xlsx",  
+        "../PEN to USD.csv",
+        "../USD to EUR .csv"
     ]
     main(files)
