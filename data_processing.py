@@ -522,12 +522,12 @@ def process_material(value):
 def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE):
     """Prepara DataFrames para las operaciones de join."""
     column_types = {
-        'Fecha de solicitud': 'datetime64',
-        'Fecha de reg. Factura': 'datetime64',
-        'Fecha de HES/EM': 'datetime64',
-        'Fecha contable': 'datetime64',
-        'Fecha de aprobación de la orden de compr': 'datetime64',
-        'Fecha documento': 'datetime64',
+        'Fecha de solicitud': 'datetime64[D]',
+        'Fecha de reg. Factura': 'datetime64[D]',
+        'Fecha de HES/EM': 'datetime64[D]',
+        'Fecha contable': 'datetime64[D]',
+        'Fecha de aprobación de la orden de compr': 'datetime64[D]',
+        'Fecha documento': 'datetime64[D]',
         # Añade cualquier otra columna que necesites definir aquí
     }
 
