@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from data_processing import *
+import data_processing as dp
 import base64
 
 def process_uploaded_files(files):
@@ -28,7 +28,7 @@ def process_uploaded_files(files):
         if dfs["ZMB52"] is None:
             st.error("Error: El archivo ZMB52 no se cargó correctamente.")
             return
-        dfs["MCBE"] = process_MCBE(pd.read_excel(files[5]))
+        dfs["MCBE"] = dp.process_MCBE(pd.read_excel(files[5]))
         if dfs["MCBE"] is None:
             st.error("Error: El archivo MCBE no se cargó correctamente.")
             return
