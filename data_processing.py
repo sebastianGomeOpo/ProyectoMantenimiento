@@ -904,14 +904,14 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
     df_inmovilizados_converted['Material'].fillna("Unknown", inplace=True)
     
     # Verificación de duplicados en df_inmovilizados_converted antes del merge
-    # total_rows = df_inmovilizados_converted.shape[0]
-    # unique_material_values = df_inmovilizados_converted['Material'].nunique()
-    # if total_rows != unique_material_values:
-    #     print(f"Hay {total_rows - unique_material_values} valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
-    #     df_inmovilizados_converted.drop_duplicates(subset='Material', inplace=True)
-    #     print("Valores duplicados eliminados.")
+    total_rows = df_inmovilizados_converted.shape[0]
+    unique_material_values = df_inmovilizados_converted['Material'].nunique()
+    if total_rows != unique_material_values:
+        # print(f"Hay {total_rows - unique_material_values} valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
+        df_inmovilizados_converted.drop_duplicates(subset='Material', inplace=True)
+        # print("Valores duplicados eliminados.")
     # else:
-    #     print("No hay valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
+        # print("No hay valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
     # print(f"Rows after final left_join:{joined_data.shape[0]}")
     
     # Realizar el merge
@@ -919,10 +919,10 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
                                     on='Material', 
                                     how='left')
     
-    # Después del merge, verifica el número de filas
+    #Después del merge, verifica el número de filas
     # print(f"Rows after final left_join: {joined_data.shape[0]}")
     
-    # Filtrar y mostrar los valores duplicados de 'Material' después del merge
+    #Filtrar y mostrar los valores duplicados de 'Material' después del merge
     # duplicated_materials = joined_data[joined_data['Material'].duplicated(keep=False)]
     # print("Valores duplicados de 'Material' después del merge:")
     # print(duplicated_materials['Material'].value_counts())
