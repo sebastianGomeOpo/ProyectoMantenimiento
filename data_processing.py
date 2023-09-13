@@ -7,7 +7,7 @@ Created on Fri Aug 25 08:07:53 2023
 import pandas as pd
 import hashlib
 import numpy as np
-
+import time
 
 # -------------------------
 # Funciones de Carga de Datos
@@ -550,9 +550,20 @@ def vectorized_convertir_moneda(df):
     return df['Precio neto'] / df['Tipo de Cambio']
 
 class CoincidenciaBuscadorFinal:
-    def __init__(self, dataset_entrada, dataset_busqueda):
+    def __init__(self, dataset_entrada, dataset_busqueda, columna_verificacion=None):
         self.dataset_entrada = dataset_entrada
+        if columna_verificacion:
+            # Verificar si hay valores duplicados en la columna especificada
+            duplicados = dataset_busqueda[dataset_busqueda.duplicated(subset=columna_verificacion, keep=False)]
+            
+            # Si hay duplicados, mostrar los valores duplicados y eliminarlos
+            if not duplicados.empty:
+                print("Hay valores duplicados en la columna:", columna_verificacion)
+                print(duplicados[columna_verificacion].unique())
+                dataset_busqueda = dataset_busqueda.drop_duplicates(subset=columna_verificacion, keep='first')
+                
         self.dataset_busqueda = dataset_busqueda
+
 
     def buscar_coincidencia(self, columna_a_buscar, columna_busqueda, valor_coincidencia, 
                             nombre_columna_resultado="Resultado", nombre_columna_busqueda=None):
@@ -693,13 +704,15 @@ def merge_dataframes(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df
                      df_tipos_cambio):
     """Merge DataFrames based on the provided logic."""
     joined_data = df_ME5A[['COMODIN SOLPED', 'COMODIN OC']]
-    # joined_data = outer_join_and_fill_na(joined_data, df_ME2N_OC, 'COMODIN OC').drop_duplicates()
+    print(f"Initial rows: {joined_data.shape[0]}")
+    
     df_ZMM621_OCompras = create_ZMM621_COMODIN_OC_unique(df_ZMM621_fechaAprobacion)
     df_ZMM621_OMant = create_ZMM621_Orden_unique(df_ZMM621_fechaAprobacion)
 
     # joined_data = outer_join_and_fill_na(joined_data, df_ZMM621_fechaAprobacion, 'COMODIN SOLPED').drop_duplicates()
     joined_data = left_join(joined_data, df_ZMM621_OMant, 'COMODIN OC', ['Orden']).drop_duplicates()
-
+    print(f"Rows after df_ZMM621_OMant join: {joined_data.shape[0]}")
+    
     # joined_data = outer_join_and_fill_na(joined_data, df_IW38, 'Orden')
 
     # Perform left joins to extract data from transactions
@@ -725,7 +738,7 @@ def merge_dataframes(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df
     for df, key, columns in left_join_operations:
         check_columns_existence(df, [key]+ columns)
         joined_data = left_join(joined_data, df, key, columns)
-
+        print(f"Rows after joining with {key}: {joined_data.shape[0]}")
     return joined_data
 
 
@@ -754,7 +767,7 @@ def refine_joined_data(joined_data):
 
 
 def calculate_additional_columns(joined_data, df_tipos_cambio):
-    """Calculate and add new columns based on the provided logic."""
+    """Calculate and add new columns based on the provided logic.""" 
     joined_data['Estado contable'] = vectorized_calcular_estado_contable(joined_data)
     joined_data['Indicador de borrado SOLPED'] = np.where(joined_data['Indicador de borrado SOLPED'] == 'True',
                                                           'SOLPED BORRADA ', '')
@@ -762,33 +775,28 @@ def calculate_additional_columns(joined_data, df_tipos_cambio):
         joined_data['Indicador de borrado Orden de Compra'] == 'L', 'OC.BORRADA', '')
     joined_data['TIPO'] = np.where(joined_data['Material'].isna() | joined_data['Material'].isin(['', 'nan']),
                                    'SERVICIO', 'COMPRA')
-    # joined_data['TIPO'] = joined_data['Material'].apply(categorizar_tipo)
     mask = joined_data['Por entregar (cantidad)'].isna() | joined_data['Por entregar (cantidad)'].isin(['', 'nan']) | (
                 joined_data['Por entregar (cantidad)'] > 0)
     joined_data['Por entregar (STATUS)'] = np.where(mask, 'PENDIENTE', 'CONCLUIDO')
-    # joined_data['Por entregar (STATUS)'] = joined_data['Por entregar (cantidad)'].apply(categorizar_entrega)
     joined_data['PENDIENTE DE LIBERACIÓN DE OC'] = vectorized_calculate_status(joined_data)
-    # joined_data['DEMORA EN GENERAR OC (DIAS)'] = joined_data.apply(calculate_date_difference, axis=1)
     joined_data['DEMORA EN GENERAR OC (DIAS)'] = vectorized_calculate_date_difference(joined_data)
-    # joined_data['DEMORA EN LIBERACIONES DE OC'] = joined_data.apply(calculate_days_difference, axis=1)
     joined_data['DEMORA EN LIBERACIONES DE OC'] = vectorized_calculate_days_difference(joined_data)
-    # joined_data['FECHA COMODIN - CONTABLE O SOLPED'] = joined_data.apply(calcular_fecha, axis=1)
     joined_data['FECHA COMODIN - CONTABLE O SOLPED'] = vectorized_calcular_fecha(joined_data)
     joined_data['Año OC'] = pd.to_datetime(joined_data['Fecha de OC']).dt.year
     joined_data['Mes OC'] = pd.to_datetime(joined_data['Fecha de OC']).dt.month
+    
     joined_data = pd.merge(joined_data, df_tipos_cambio, left_on=['Año OC', 'Mes OC'], right_on=['Año', 'Mes'],
                            how='left')
-    # joined_data['Tipo de Cambio'] = joined_data.apply(get_tipo_cambio, axis=1)
+    
     joined_data['Tipo de Cambio'] = vectorized_get_tipo_cambio(joined_data)
     joined_data['Precio neto'] = pd.to_numeric(joined_data['Precio neto'], errors='coerce')
     joined_data['Tipo de Cambio'] = pd.to_numeric(joined_data['Tipo de Cambio'], errors='coerce')
-    # joined_data['Precio Convertido Dolares'] = joined_data.apply(convertir_moneda, axis=1)
     joined_data['Precio Convertido Dolares'] = vectorized_convertir_moneda(joined_data)
     joined_data = joined_data.drop(columns=['Tipo_Cambio_PEN', 'Tipo_Cambio_EUR', 'Año', 'Mes'])
-    # Falta logica
     joined_data['TIPO COMPROMETIDO SUGERENCIA'] = vectorized_tipoCromprometido(joined_data)
+    
+    
     return joined_data
-
 
 def costoComprasPorRetirar(df):
     # Seleccionamos y ordenamos las columnas de interés
@@ -810,9 +818,9 @@ def costoComprasPorRetirar(df):
 # Función Principal de Procesamiento
 # -------------------------
 def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_criticos, df_inmovilizados, df_tipos_cambio):
-    
+    start_time = time.time()
     processed_dataframes = process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_inmovilizados, df_criticos)
-    
+    # print("Time for processing dataframes:", time.time() - start_time, "seconds")
     ###############
     # dataframe_labels = [
     #   "df_ME5A", "df_ZMM621_fechaAprobacion", "df_IW38", "df_ME2N_OC", 
@@ -838,19 +846,24 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
     #print("Headers for df_ZMM621_fechaAprobacion_converted:", df_ZMM621_fechaAprobacion_converted.columns)
     #print("Headers for df_ME2N_converted:", df_ME2N_OC_converted.columns)
     
-    
+    start_time = time.time()
     # Merge the dataframes
     joined_data = merge_dataframes(df_ME5A_converted, df_ZMM621_fechaAprobacion_converted, df_IW38_converted,
                                    df_ME2N_OC_converted, df_ZMB52_converted, df_MCBE_converted,
                                    df_ZMM621_fechaHES_HEM_converted, df_tipos_cambio)
-
+    # print("Time for merging dataframes:", time.time() - start_time, "seconds")
     
+    # print(f"Rows after merge_dataframes:{joined_data.shape[0]}")
     # Refine the merged data
+    start_time = time.time()
     joined_data = refine_joined_data(joined_data)
-
-    # Calculate additional columns
-    joined_data = calculate_additional_columns(joined_data, df_tipos_cambio)
+    # print(f"Rows after refining joined data:{joined_data.shape[0]}")
     
+    # Calculate additional columns
+    # start_time = time.time()
+    joined_data = calculate_additional_columns(joined_data, df_tipos_cambio)
+    # print("Time for calculating additional columns:", time.time() - start_time, "seconds")
+    # print(f"Rows after calculating additional columns:{joined_data.shape[0]}")
     column_order = [
         'COMODIN OC', 'COMODIN SOLPED', 'Ind.liberación', 'TIPO', 'SOLICITANTE', 'Pto.tbjo.responsable',
         'FECHA COMODIN - CONTABLE O SOLPED', 'Estado HES/HEM', 'Fecha de reg. Factura', 'Estado factura',
@@ -868,12 +881,52 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
 
     # Reorder the dataframe columns
     joined_data = joined_data[column_order]
-
+    # print(f"Rows after reordering columns:{joined_data.shape[0]}")
+    # start_time = time.time()
     joined_data = costoComprasPorRetirar(joined_data)
+    # print("Time for costoComprasPorRetirar:", time.time() - start_time, "seconds")
     
+    # print(f"Rows after costoComprasPorRetirar:{joined_data.shape[0]}")
     
+    # start_time = time.time()
     buscadorCriticos = CoincidenciaBuscadorFinal(joined_data, df_criticos)
     joined_data = buscadorCriticos.buscar_coincidencia('Material','Código SAP.','Critico', 
                                                         'Material Critico?')
-    joined_data = left_join(joined_data, df_inmovilizados_converted, 'Material', ['Estado Inmovilizado','Dias Inmovilizados'])
+    # print("Time for buscadorCriticos:", time.time() - start_time, "seconds")
+    # print(f"Rows after buscadorCriticos:{joined_data.shape[0]}")
+    # # Antes del merge, verifica el número de filas y valores únicos de 'Material' en ambos DataFrames
+    # print("Antes del merge:")
+    # print(f"joined_data filas: {joined_data.shape[0]}, valores únicos de 'Material': {joined_data['Material'].nunique()}")
+    # print(f"df_inmovilizados_converted filas: {df_inmovilizados_converted.shape[0]}, valores únicos de 'Material': {df_inmovilizados_converted['Material'].nunique()}")
+    
+    # Reemplazar NaNs en la columna 'Material' de ambos DataFrames
+    joined_data['Material'].fillna("Unknown", inplace=True)
+    df_inmovilizados_converted['Material'].fillna("Unknown", inplace=True)
+    
+    # Verificación de duplicados en df_inmovilizados_converted antes del merge
+    total_rows = df_inmovilizados_converted.shape[0]
+    unique_material_values = df_inmovilizados_converted['Material'].nunique()
+    if total_rows != unique_material_values:
+        print(f"Hay {total_rows - unique_material_values} valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
+        df_inmovilizados_converted.drop_duplicates(subset='Material', inplace=True)
+        print("Valores duplicados eliminados.")
+    else:
+        print("No hay valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
+    print(f"Rows after final left_join:{joined_data.shape[0]}")
+    
+    # Realizar el merge
+    joined_data = joined_data.merge(df_inmovilizados_converted[['Material', 'Estado Inmovilizado', 'Dias Inmovilizados']], 
+                                    on='Material', 
+                                    how='left')
+    
+    # Después del merge, verifica el número de filas
+    # print(f"Rows after final left_join: {joined_data.shape[0]}")
+    
+    # Filtrar y mostrar los valores duplicados de 'Material' después del merge
+    # duplicated_materials = joined_data[joined_data['Material'].duplicated(keep=False)]
+    # print("Valores duplicados de 'Material' después del merge:")
+    # print(duplicated_materials['Material'].value_counts())
+    # print(f"Rows after final left_join:{joined_data.shape[0]}")
+    
+
     return joined_data
