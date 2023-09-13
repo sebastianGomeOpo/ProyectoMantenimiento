@@ -818,7 +818,7 @@ def costoComprasPorRetirar(df):
 # Función Principal de Procesamiento
 # -------------------------
 def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_criticos, df_inmovilizados, df_tipos_cambio):
-    start_time = time.time()
+    #start_time = time.time()
     processed_dataframes = process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_inmovilizados, df_criticos)
     # print("Time for processing dataframes:", time.time() - start_time, "seconds")
     ###############
@@ -846,7 +846,7 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
     #print("Headers for df_ZMM621_fechaAprobacion_converted:", df_ZMM621_fechaAprobacion_converted.columns)
     #print("Headers for df_ME2N_converted:", df_ME2N_OC_converted.columns)
     
-    start_time = time.time()
+    #start_time = time.time()
     # Merge the dataframes
     joined_data = merge_dataframes(df_ME5A_converted, df_ZMM621_fechaAprobacion_converted, df_IW38_converted,
                                    df_ME2N_OC_converted, df_ZMB52_converted, df_MCBE_converted,
@@ -855,7 +855,7 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
     
     # print(f"Rows after merge_dataframes:{joined_data.shape[0]}")
     # Refine the merged data
-    start_time = time.time()
+    #start_time = time.time()
     joined_data = refine_joined_data(joined_data)
     # print(f"Rows after refining joined data:{joined_data.shape[0]}")
     
@@ -904,15 +904,15 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
     df_inmovilizados_converted['Material'].fillna("Unknown", inplace=True)
     
     # Verificación de duplicados en df_inmovilizados_converted antes del merge
-    total_rows = df_inmovilizados_converted.shape[0]
-    unique_material_values = df_inmovilizados_converted['Material'].nunique()
-    if total_rows != unique_material_values:
-        print(f"Hay {total_rows - unique_material_values} valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
-        df_inmovilizados_converted.drop_duplicates(subset='Material', inplace=True)
-        print("Valores duplicados eliminados.")
-    else:
-        print("No hay valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
-    print(f"Rows after final left_join:{joined_data.shape[0]}")
+    # total_rows = df_inmovilizados_converted.shape[0]
+    # unique_material_values = df_inmovilizados_converted['Material'].nunique()
+    # if total_rows != unique_material_values:
+    #     print(f"Hay {total_rows - unique_material_values} valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
+    #     df_inmovilizados_converted.drop_duplicates(subset='Material', inplace=True)
+    #     print("Valores duplicados eliminados.")
+    # else:
+    #     print("No hay valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
+    # print(f"Rows after final left_join:{joined_data.shape[0]}")
     
     # Realizar el merge
     joined_data = joined_data.merge(df_inmovilizados_converted[['Material', 'Estado Inmovilizado', 'Dias Inmovilizados']], 
@@ -928,5 +928,5 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
     # print(duplicated_materials['Material'].value_counts())
     # print(f"Rows after final left_join:{joined_data.shape[0]}")
     
-
+    joined_data.drop(['COMODIN OC', 'COMODIN SOLPED', 'Ind.liberación'],axis=1,inplace=True)
     return joined_data
