@@ -105,12 +105,14 @@ def main():
                 result = process_uploaded_files(files)
                 if result is not None:
                     st.success("Procesamiento completado exitosamente.")
-                    # Exportar resultado a Excel y crear enlace de descarga
+                    # Botón de descarga
                     csv = result.to_csv(index=False)
-                    b64 = base64.b64encode(csv.encode()).decode()
-                    href = f'<a href="data:file/csv;base64,{b64}" download="reporte_procesado.csv">Descargar archivo procesado</a>'
-                    st.markdown(href, unsafe_allow_html=True)
-                    
+                    st.download_button(
+                        label="Descargar archivo procesado",
+                        data=csv,
+                        file_name="reporte_procesado.csv",
+                        mime="text/csv"
+                    )
                 # Aquí puedes agregar el botón de descarga si lo necesitas
             except Exception as e:
                 st.error(f"Error procesando los datos: {e}")
