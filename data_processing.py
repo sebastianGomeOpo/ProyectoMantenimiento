@@ -460,16 +460,27 @@ def vectorized_calculate_status(df):
     return status
 
 
-def vectorized_calculate_date_difference(row):
+def vectorized_calculate_date_difference(df):
     """Calculate the difference in days between 'Fecha de OC' and 'Fecha de SOLPED'."""
-    date_of_oc = pd.to_datetime(row['Fecha de OC'], errors='coerce')
-    date_of_solped = pd.to_datetime(row['Fecha de SOLPED'], errors='coerce')
+    df['Fecha de OC'] = pd.to_datetime(df['Fecha de OC'], errors='coerce')
+    df['Fecha de SOLPED'] = pd.to_datetime(df['Fecha de SOLPED'], errors='coerce')
 
-    default_diff = np.where(pd.isnull(date_of_oc) & pd.isnull(date_of_solped), "",
-                            np.where(pd.isnull(date_of_oc), (pd.Timestamp.today() - date_of_solped).dt.days,
-                                     (date_of_oc - date_of_solped).dt.days))
+    # Inicializar una nueva columna con valores nulos
+    df['DEMORA EN GENERAR OC (DIAS)'] = None
+    
+    # Filtrar las filas donde 'TIPO COMPROMETIDO SUGERENCIA' es "SERV. POR FINALIZAR" o "COMPRA POR LLEGAR"
+    mask = df['TIPO COMPROMETIDO SUGERENCIA'].isin(["SERV. POR FINALIZAR", "COMPRA POR LLEGAR"])
+    
+    # Realizar el cálculo para esas filas
+    filtered_df = df[mask]
+    df.loc[mask, 'DEMORA EN GENERAR OC (DIAS)'] = np.where(
+        pd.isnull(filtered_df['Fecha de OC']) & pd.isnull(filtered_df['Fecha de SOLPED']), "",
+        np.where(pd.isnull(filtered_df['Fecha de OC']),
+                 (pd.Timestamp.today() - filtered_df['Fecha de SOLPED']).dt.days,
+                 (filtered_df['Fecha de OC'] - filtered_df['Fecha de SOLPED']).dt.days)
+    )
 
-    return default_diff
+    return filtered_df
 
 
 def vectorized_calculate_days_difference(df):
@@ -727,7 +738,7 @@ def merge_dataframes(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df
         (df_IW38, 'Orden',
          ['Pto.tbjo.responsable', 'Denominación de la ubicación técnica', 'Denominación de objeto técnico', 'Equipo']),
         (df_ME2N_OC, 'COMODIN OC',
-         ['Proveedor/Centro suministrador', 'Estado liberación', 'Indicador de borrado', 'Fecha documento',
+         ['Proveedor/Centro suministrador','Posición', 'Estado liberación', 'Indicador de borrado', 'Fecha documento',
           'Por entregar (cantidad)', 'Cantidad de pedido', 'Precio neto', 'Moneda', 'Por entregar (valor)',
           'Ind.liberación', 'ESTRATÉGIA DE LIBERACIÓN']),
         (df_ZMB52, 'Material', ['Libre utilización']),
@@ -779,7 +790,8 @@ def calculate_additional_columns(joined_data, df_tipos_cambio):
                 joined_data['Por entregar (cantidad)'] > 0)
     joined_data['Por entregar (STATUS)'] = np.where(mask, 'PENDIENTE', 'CONCLUIDO')
     joined_data['PENDIENTE DE LIBERACIÓN DE OC'] = vectorized_calculate_status(joined_data)
-    joined_data['DEMORA EN GENERAR OC (DIAS)'] = vectorized_calculate_date_difference(joined_data)
+    joined_data['TIPO COMPROMETIDO SUGERENCIA'] = vectorized_tipoCromprometido(joined_data)
+    joined_data = vectorized_calculate_date_difference(joined_data)
     joined_data['DEMORA EN LIBERACIONES DE OC'] = vectorized_calculate_days_difference(joined_data)
     joined_data['FECHA COMODIN - CONTABLE O SOLPED'] = vectorized_calcular_fecha(joined_data)
     joined_data['Año OC'] = pd.to_datetime(joined_data['Fecha de OC']).dt.year
@@ -793,7 +805,7 @@ def calculate_additional_columns(joined_data, df_tipos_cambio):
     joined_data['Tipo de Cambio'] = pd.to_numeric(joined_data['Tipo de Cambio'], errors='coerce')
     joined_data['Precio Convertido Dolares'] = vectorized_convertir_moneda(joined_data)
     joined_data = joined_data.drop(columns=['Tipo_Cambio_PEN', 'Tipo_Cambio_EUR', 'Año', 'Mes'])
-    joined_data['TIPO COMPROMETIDO SUGERENCIA'] = vectorized_tipoCromprometido(joined_data)
+    
     
     
     return joined_data
@@ -867,9 +879,9 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
     column_order = [
         'COMODIN OC', 'COMODIN SOLPED', 'Ind.liberación', 'TIPO', 'SOLICITANTE', 'Pto.tbjo.responsable',
         'FECHA COMODIN - CONTABLE O SOLPED', 'Estado HES/HEM', 'Fecha de reg. Factura', 'Estado factura',
-        'Fecha contable', 'Estado contable', 'Fecha de HES/EM', 'Pos.solicitud pedido', 'Material', 'N° Activo',
-        'Cantidad solicitada', 'Unidad de medida', 'Solicitud de pedido', 'Cantidad de pedido',
-        'Por entregar (cantidad)', 'Pedido', 'Indicador de Liberación', 'Orden', 'Condición de pago del pedido',
+        'Fecha contable', 'Estado contable', 'Fecha de HES/EM','Material', 'N° Activo',
+        'Cantidad solicitada', 'Unidad de medida', 'Solicitud de pedido','Pos.solicitud pedido','Cantidad de pedido',
+        'Por entregar (cantidad)', 'Pedido','Posición', 'Indicador de Liberación', 'Orden', 'Condición de pago del pedido',
         'Valor net. Solped', 'Denominación de la ubicación técnica', 'Denominación de objeto técnico', 'Equipo',
         'Por entregar (STATUS)', 'Por entregar (valor)', 'Precio neto', 'Descripcion Material', 'Moneda',
         'Libre utilización', 'Indicador de borrado SOLPED', 'Año OC', 'Mes OC', 'Indicador de borrado Orden de Compra',
