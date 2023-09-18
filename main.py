@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import data_processing as dp
-import base64
+from utilities.process_dataframes import process_MCBE, load_and_unify_dataframes, validate_and_create_comodin_columns
 
 def process_uploaded_files(files):
     dfs = {}
@@ -28,7 +28,7 @@ def process_uploaded_files(files):
         if dfs["ZMB52"] is None:
             st.error("Error: El archivo ZMB52 no se cargó correctamente.")
             return
-        dfs["MCBE"] = dp.process_MCBE(pd.read_excel(files[5]))
+        dfs["MCBE"] = process_MCBE(pd.read_excel(files[5]))
         if dfs["MCBE"] is None:
             st.error("Error: El archivo MCBE no se cargó correctamente.")
             return
@@ -42,7 +42,7 @@ def process_uploaded_files(files):
             return
 
         try:
-            dfs["tipos_cambio"] = dp.load_and_unify_dataframes(files[8], files[9])
+            dfs["tipos_cambio"] = load_and_unify_dataframes(files[8], files[9])
             if dfs["tipos_cambio"] is None:
                 st.error("Error: Los archivos de tipos de cambio no se cargaron correctamente.")
                 return
@@ -63,7 +63,7 @@ def process_uploaded_files(files):
             return
         if key in ["ME5A", "ZMM621", "ME2N"]:
             try:
-                dfs[f"{key}_ComodinCreated"], message = dp.validate_and_create_comodin_columns(df, f"df_{key}")
+                dfs[f"{key}_ComodinCreated"], message = validate_and_create_comodin_columns(df, f"df_{key}")
                 st.write(message)
             except Exception as e:
                 st.error(f"Error validando y creando columnas para {key}: {e}")
@@ -90,8 +90,8 @@ def main():
         st.file_uploader("Subir archivo MCBE", type=["xlsx"]),       # Nuevo archivo
         st.file_uploader("Subir archivo CRITICOS", type=["xlsx"]),   # Nuevo archivo
         st.file_uploader("Subir archivo INMOVILIZADOS", type=["xlsx"]), # Nuevo archivo
-        st.file_uploader("Subir archivo PEN a USD", type=["csv"]),
-        st.file_uploader("Subir archivo EUR a USD", type=["csv"])
+        st.file_uploader("Subir archivo PEN a USD", type=["xlsx"]),
+        st.file_uploader("Subir archivo EUR a USD", type=["xlsx"])
     ]
     
     if all(files):

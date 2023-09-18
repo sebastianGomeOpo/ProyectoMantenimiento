@@ -1,5 +1,7 @@
 import pandas as pd
-from data_processing import *
+from data_processing import process_data
+from utilities.process_dataframes import process_MCBE, load_and_unify_dataframes, validate_and_create_comodin_columns
+
 
 def process_uploaded_files(files):
     dfs = {}
@@ -45,7 +47,7 @@ if __name__ == "__main__":
         "../MCBE.xlsx",
         "../CRITICOS.xlsx",
         "../INMOVILIZADOS.xlsx",  
-        "../PEN to USD.csv",
-        "../USD to EUR .csv"
+        "../PEN to USD.xlsx",
+        "../USD to EUR .xlsx"
     ]
     main(files)
