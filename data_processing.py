@@ -4,6 +4,18 @@ from utilities import merge_dataframes as md_util
 from utilities import refine_joined_data as rjd_util
 from utilities import calculate_additional_columns as cac_util
 
+import time
+class Timer:
+    def __init__(self, message):
+        self.message = message
+        
+    def __enter__(self):
+        self.start = time.time()
+        
+    def __exit__(self, *args):
+        self.end = time.time()
+        elapsed_time = self.end - self.start
+        print(f"{self.message}: {elapsed_time:.2f} seconds")
 # -------------------------
 # Funciones de Carga de Datos
 # -------------------------
@@ -70,7 +82,7 @@ def process_data(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB
     # print("Time for calculating additional columns:", time.time() - start_time, "seconds")
     # print(f"Rows after calculating additional columns:{joined_data.shape[0]}")
     column_order = [
-        'COMODIN OC', 'COMODIN SOLPED', 'Ind.liberación', 'TIPO', 'Solicitante', 'Pto.tbjo.responsable',
+        'COMODIN OC', 'COMODIN SOLPED', 'Ind.liberación', 'TIPO', 'Solicitante','Solicitante Corregido', 'Pto.tbjo.responsable',
         'Estado HES/HEM', 'Fecha de reg. Factura', 'Estado factura',
         'Fecha contable', 'Estado contable', 'Fecha de HES/EM','Material', 'N° Activo',
         'Cantidad solicitada', 'Unidad de medida', 'Solicitud de pedido','Pos.solicitud pedido','Cantidad de pedido',

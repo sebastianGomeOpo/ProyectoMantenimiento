@@ -237,7 +237,7 @@ def merge_dataframes(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df
     # Se definen las operaciones de fusión (unión izquierda) que se realizarán en orden
     left_join_operations = [
         (df_ME5A, 'COMODIN SOLPED',
-         ['Material', 'Pedido', 'Solicitud de pedido', 'Pos.solicitud pedido', 'Solicitante', 'Indicador de borrado',
+         ['Material', 'Pedido', 'Solicitud de pedido', 'Pos.solicitud pedido', 'Solicitante','Solicitante Corregido', 'Indicador de borrado',
           'Indicador liberación', 'Fecha de solicitud', 'Unidad de medida', 'Cantidad solicitada', 'Texto breve']),
         (df_ZMM621_OCompras, 'COMODIN OC',
          ['Estado factura', 'Fecha de reg. Factura', 'Fecha de HES/EM', 'Fecha contable',

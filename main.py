@@ -2,7 +2,26 @@ import streamlit as st
 import pandas as pd
 import data_processing as dp
 from utilities.process_dataframes import process_MCBE, load_and_unify_dataframes, validate_and_create_comodin_columns
+import gspread
 
+def save_to_google_sheet(df, credentials, sheet_name="Sheet1"):
+    """
+    Guarda un DataFrame de pandas en Google Sheets.
+    """
+    # Establece la conexión con Google Sheets
+    gc = gspread.service_account_from_dict(credentials)
+    sh = gc.open_by_url(st.secrets["private_gsheets_url"])
+    worksheet = sh.worksheet(sheet_name)
+    
+    # Si la hoja no está en blanco, la limpia
+    worksheet.clear()
+    
+    # Actualiza la hoja con el DataFrame
+    worksheet.insert_rows(df.values.tolist(), row=1)
+    
+    # Actualiza los encabezados
+    worksheet.insert_row(df.columns.tolist(), index=1)
+    
 def process_uploaded_files(files):
     dfs = {}
     
@@ -80,6 +99,10 @@ def process_uploaded_files(files):
 def main():
     st.title("Aplicación de Procesamiento de Datos")
     
+    # Inicialización del estado de sesión para el botón de procesamiento
+    if 'processed' not in st.session_state:
+        st.session_state.processed = False
+        
     # Carga de archivos usando Streamlit
     files = [
         st.file_uploader("Subir archivo ME5A", type=["xlsx"]),
@@ -98,13 +121,17 @@ def main():
         st.success("Todos los archivos han sido subidos correctamente.")
     
     # Botón de procesamiento
-    if st.button("Procesar archivos"):
+    if st.button("Procesar archivos") or st.session_state.processed:
         if all(files):
             try:
                 st.write("Procesando...")
                 result = process_uploaded_files(files)
                 if result is not None:
                     st.success("Procesamiento completado exitosamente.")
+                    
+                    # Guarda el resultado en Google Sheets
+                    save_to_google_sheet(result, st.secrets["gcp_service_account"])
+                    
                     # Botón de descarga
                     csv = result.to_csv(index=False)
                     st.download_button(

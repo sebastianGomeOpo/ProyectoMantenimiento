@@ -1,5 +1,6 @@
 _pycache_
 .spyproject
+.streamlit
 *.csv
 *.html
 resultado.xlsx

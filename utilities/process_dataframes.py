@@ -1,10 +1,24 @@
 import pandas as pd 
 import numpy as np
 import hashlib
-
+from rapidfuzz import process
 #--------------------------------------------
 #FUNCIONES DE MANIPULACION DE DATASETS BRUTOS
 #---------------------------------------------
+
+def corregir_solicitantes_vectorizado(df,lista_maestra_dict):
+    maestro_keys = list(lista_maestra_dict.keys())
+    
+    # Obtiene los mejores matches para cada solicitante
+    best_matches = [process.extractOne(solic, maestro_keys) for solic in df['Solicitante']]
+    
+    # Extrae los nombres de las coincidencias
+    best_match_names = [match[0] if match[1] > 80 else solic for solic, match in zip(df['Solicitante'], best_matches)]
+    
+    df['Solicitante Corregido'] = best_match_names
+    return df
+
+
 def generate_hash_id(*args):
     """Genera un HASH ID en base a una entrada."""
     combined_string = ''.join(map(str, args))
@@ -321,7 +335,7 @@ def set_column_dtypes(data, column_type_mapping):
                 default_value = default_na_values.get(data_type, "Unknown")
                 data[column_name].fillna(default_value, inplace=True)
                 data[column_name] = data[column_name].astype(data_type)
-                print(f"La columna {column_name} se ha convertido a {data_type}.")
+                #print(f"La columna {column_name} se ha convertido a {data_type}.")
             except Exception as e:
                 print(f"No se pudo convertir la columna {column_name} a {data_type}. Excepción: {e}")
                 if data_type == 'float64':
@@ -352,7 +366,8 @@ def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_
     column_name_mapping = {
     'SOLICITANTE': 'Solicitante',
     'Indicador de Liberación': 'Indicador liberación',
-    'ESTRATÉGIA DE LIBERACIÓN':'Estrategia liberac.'
+    'ESTRATÉGIA DE LIBERACIÓN':'Estrategia liberac.',
+    'Numero de orden':'Orden de mantenimiento',
     }
     
     def standardize_columns_for_dataframe(df, column_mapping):
@@ -364,7 +379,21 @@ def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_
     standardize_columns_for_dataframe(df_ME2N_OC, column_name_mapping)
     standardize_columns_for_dataframe(df_ZMB52, column_name_mapping)
     standardize_columns_for_dataframe(df_MCBE, column_name_mapping)
-    #######################################    
+    
+    lista_maestra_dict = {
+    "EMANCHEGOM": "JEF-MM03",
+    "MLAGUNAR(G)": "JEF-GE01",
+    "MLAGUNAR": "JEF-ME02",
+    "YPANDIAP": "JEF-ME01",
+    "CTICSER": "JEF-MG01",
+    "JPACCOC": "JEF-EM01",
+    "ARADOP": "JEF-PL01",
+    "MMELGARN":"JEF-MG01"
+    }
+    
+    corregir_solicitantes_vectorizado(df_ME5A,lista_maestra_dict)
+    
+    
     df_ZMB52 = df_ZMB52.pivot_table(
         index=['Material'],
         values=['Valor libre util.', 'Libre utilización'],
