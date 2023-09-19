@@ -2,26 +2,60 @@ import streamlit as st
 import pandas as pd
 import data_processing as dp
 from utilities.process_dataframes import process_MCBE, load_and_unify_dataframes, validate_and_create_comodin_columns
+from google.oauth2 import service_account
+from gsheetsdb import connect
 import gspread
+
+# Este es el objeto de conexión que usarás para interactuar con Google Sheets.
+credentials = service_account.Credentials.from_service_account_info(
+    st.secrets["gcp_service_account"],
+    scopes=[
+        "https://www.googleapis.com/auth/spreadsheets",
+    ],
+)
+conn = connect(credentials=credentials)
+
+@st.cache(ttl=600)
+def run_query(query):
+    """Ejecuta la consulta SQL en Google Sheets y devuelve un DataFrame."""
+    rows = conn.execute(query, headers=1)
+    return pd.DataFrame(rows.fetchall())
+
+def test_google_sheets_connection(credentials):
+    try:
+        # Establece la conexión con Google Sheets
+        gc = gspread.service_account_from_dict(credentials)
+        sh = gc.open_by_url(st.secrets["private_gsheets_url"])
+        worksheet = sh.get_worksheet(0)
+        # Lee algunos datos
+        data = worksheet.get_all_records()
+        st.write(data)
+        st.success("Conexión exitosa.")
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+
+if st.button("Test Connection"):
+    test_google_sheets_connection(st.secrets["gcp_service_account"])
 
 def save_to_google_sheet(df, credentials, sheet_name="Sheet1"):
     """
     Guarda un DataFrame de pandas en Google Sheets.
     """
-    # Establece la conexión con Google Sheets
-    gc = gspread.service_account_from_dict(credentials)
-    sh = gc.open_by_url(st.secrets["private_gsheets_url"])
-    worksheet = sh.worksheet(sheet_name)
-    
-    # Si la hoja no está en blanco, la limpia
-    worksheet.clear()
-    
-    # Actualiza la hoja con el DataFrame
-    worksheet.insert_rows(df.values.tolist(), row=1)
-    
-    # Actualiza los encabezados
-    worksheet.insert_row(df.columns.tolist(), index=1)
-    
+    try:
+        # Establece la conexión con Google Sheets
+        gc = gspread.service_account_from_dict(credentials)
+        sh = gc.open_by_url(st.secrets["private_gsheets_url"])
+        worksheet = sh.worksheet(sheet_name)
+        # Si la hoja no está en blanco, la limpia
+        worksheet.clear()
+        # Actualiza la hoja con el DataFrame
+        worksheet.insert_rows(df.values.tolist(), row=1)
+        # Actualiza los encabezados
+        worksheet.insert_row(df.columns.tolist(), index=1)
+        st.success("Datos guardados exitosamente en Google Sheets.")
+    except Exception as e:
+        st.error(f"Error guardando los datos en Google Sheets: {str(e)}")
+        
 def process_uploaded_files(files):
     dfs = {}
     
