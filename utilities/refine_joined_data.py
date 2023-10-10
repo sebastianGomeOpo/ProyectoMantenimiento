@@ -20,7 +20,11 @@ def refine_joined_data(joined_data):
         'Indicador de borrado_x': 'Indicador de borrado SOLPED',
         'Indicador de borrado_y': 'Indicador de borrado Orden de Compra',
         'Texto breve': 'Descripcion Material',
-        'Fecha documento': 'Fecha de OC'
+        'Fecha documento': 'Fecha de OC',
+        'Fecha Doc. Fact.':'Fecha de reg. Factura',
+        'Fecha de registro.1':'Fecha de HES/EM'
+        
+        
     }
 
     for current_name, new_name in rename_mappings.items():

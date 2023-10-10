@@ -6,17 +6,20 @@ from rapidfuzz import process
 #FUNCIONES DE MANIPULACION DE DATASETS BRUTOS
 #---------------------------------------------
 
-def corregir_solicitantes_vectorizado(df,lista_maestra_dict):
+def corregir_solicitantes_vectorizado(df, lista_maestra_dict, columna):
     maestro_keys = list(lista_maestra_dict.keys())
-    
+    df[columna] = df[columna].str.upper()
     # Obtiene los mejores matches para cada solicitante
-    best_matches = [process.extractOne(solic, maestro_keys) for solic in df['Solicitante']]
+    best_matches = [process.extractOne(solic, maestro_keys) for solic in df[columna]]
     
     # Extrae los nombres de las coincidencias
-    best_match_names = [match[0] if match[1] > 80 else solic for solic, match in zip(df['Solicitante'], best_matches)]
+    best_match_names = [match[0] if match[1] > 80 else solic for solic, match in zip(df[columna], best_matches)]
     
-    df['Solicitante Corregido'] = best_match_names
+    # En lugar de sobrescribir la columna original, crearemos una nueva columna con los nombres corregidos
+    # Esta columna tendrá el mismo nombre que la columna original con el sufijo "Corregido"
+    df[columna + ' Corregido'] = best_match_names
     return df
+
 
 
 def generate_hash_id(*args):
@@ -24,6 +27,97 @@ def generate_hash_id(*args):
     combined_string = ''.join(map(str, args))
     return hashlib.sha256(combined_string.encode()).hexdigest()
 
+def sort_and_remove_duplicates(data, columns_to_sort, duplicate_check_column):
+    """
+    Ordena un DataFrame y elimina filas duplicadas según una columna específica.
+
+    Parámetros:
+    - datos (DataFrame): El DataFrame a procesar.
+    - columnas_a_ordenar (list): Lista de columnas para ordenar.
+    - columna_verificacion_duplicados (str): Columna para verificar duplicados.
+
+    Retorna:
+    - DataFrame: DataFrame procesado.
+    """
+    sorted_data = data.sort_values(by=columns_to_sort, ascending=[True, False])
+    sorted_data.drop_duplicates(subset=duplicate_check_column, keep='first', inplace=True)
+    return sorted_data
+def rename_column(data, current_name, new_name):
+    """
+    Renombra una columna en un DataFrame.
+
+    Parámetros:
+    - datos (DataFrame): El DataFrame.
+    - nombre_actual (str): Nombre actual de la columna.
+    - nuevo_nombre (str): Nuevo nombre de la columna.
+
+    Retorna:
+    - DataFrame: DataFrame con columna renombrada.
+    """
+    data.rename(columns={current_name: new_name}, inplace=True)
+    return data
+
+def create_ZMM621_COMODIN_OC_HES_HEM(df_ZMM621_fechaAprobacion):
+    """
+    Crea el dataframe ZMM621 para el estado de HES/HEM, utilizando la columna 'COMODIN OC' como llave primaria.
+    
+    Parámetros:
+    - df_ZMM621_fechaAprobacion (DataFrame): Se carga los datos directamente cargados del SAP.
+    
+    Retorna:
+    - DataFrame: DataFrame procesado.
+    """
+    
+    # Filtramos las Ordenes de compra para quedarnos solo con la más reciente según la fecha de HES/EM (Fecha de registro.1)
+    df_ZMM621_HES_HEM = sort_and_remove_duplicates(df_ZMM621_fechaAprobacion, ['COMODIN OC', 'Fecha de registro.1'], 'COMODIN OC')
+
+    # Utilizamos una operación vectorizada para crear la columna 'Estado HES/HEM'
+    mask = pd.isna(df_ZMM621_HES_HEM['Fecha de registro.1'])
+    df_ZMM621_HES_HEM['Estado HES/HEM'] = np.where(mask, "SIN HES/EM", "ACEPTADO")
+
+    return df_ZMM621_HES_HEM
+
+def create_ZMM621_Orden_unique(df_ZMM621_fechaAprobacion):
+    """
+    Crea el dataframe ZMM621 , usando la columna 'Orden de mantenimiento'como llave primary
+
+    Parámetros:
+    - df_ZMM621(DataFrame): Se carga los datos directamente cargados del SAP 
+
+    Retorna:
+    - DataFrame: DataFrame procesado.
+    """
+    # Convertir valores 'Unknown' a NaN
+    df_ZMM621_fechaAprobacion['Orden de mantenimiento'] = df_ZMM621_fechaAprobacion['Orden de mantenimiento'].replace('Unknown', np.nan)
+    
+    # Convertir la columna a numérico
+    df_ZMM621_fechaAprobacion['Orden de mantenimiento'] = pd.to_numeric(df_ZMM621_fechaAprobacion['Orden de mantenimiento'], errors='coerce').dropna()
+    
+    df_ZMM621_OMant = sort_and_remove_duplicates(df_ZMM621_fechaAprobacion,
+                                                          ['Orden de mantenimiento', 'Fecha contable'],
+                                                          'Orden de mantenimiento')
+    rename_column(df_ZMM621_OMant, 'Orden de mantenimiento', 'Orden')
+    
+    return df_ZMM621_OMant
+
+def create_ZMM621_COMODIN_OC_unique(df_ZMM621_fechaAprobacion):
+    """
+    Crea el dataframe ZMM621 , usando la columna 'COMODIN OC'como llave primary
+
+    Parámetros:
+    - df_ZMM621(DataFrame): Se carga los datos directamente cargados del SAP 
+
+    Retorna:
+    - DataFrame: DataFrame procesado.
+    """
+    df_ZMM621_OCompras = sort_and_remove_duplicates(df_ZMM621_fechaAprobacion, ['COMODIN OC', 'Fecha contable'],
+                                                    'COMODIN OC')
+    # Utiliza operaciones vectorizadas para crear la columna 'Estado factura'
+    mask = pd.isna(df_ZMM621_OCompras['Fecha Doc. Fact.'])
+    df_ZMM621_OCompras['Estado factura'] = "FACTURADO"  # Valor por defecto
+    df_ZMM621_OCompras.loc[mask, 'Estado factura'] = "SIN FACTURA"  # Actualiza solo las filas que cumplen con la máscara
+    
+    return df_ZMM621_OCompras
 
 def convert_column_to_int(df, column_name):
     """
@@ -146,47 +240,6 @@ def process_MCBE(df):
     df = df.reset_index(drop=True)
     return df
 
-def load_and_unify_dataframes(path_pen, path_eur):
-    """
-    Carga y fusiona dos CSVs basados en mes y año para tasas de cambio de divisas.
-
-    Parámetros:
-    - ruta_pen (str): Ruta al CSV PEN a USD.
-    - ruta_eur (str): Ruta al CSV EUR a USD.
-
-    Retorna:
-    - DataFrame: DataFrame fusionado con tasas de cambio para PEN y EUR.
-    """
-
-    def load_and_rename_csv(path, column_names):
-        data = pd.read_excel(path, skiprows=2)
-        data.columns = column_names
-        return data
-
-    def extract_year_month_from_date(data):
-        """Extrae año y mes de una columna 'Fecha'."""
-        data['Fecha'] = pd.to_datetime(data['Fecha'])
-        data['Año'] = data['Fecha'].dt.year
-        data['Mes'] = data['Fecha'].dt.month
-        data.drop('Fecha', axis=1, inplace=True)
-        return data
-
-    # Cargar y validar los datasets
-    try:
-        df_pen = load_and_rename_csv(path_pen, ['Fecha', 'Tipo_Cambio_PEN'])
-        df_eur = load_and_rename_csv(path_eur, ['Fecha', 'Tipo_Cambio_EUR'])
-    except Exception as e:
-        raise ValueError(f"Error al cargar y renombrar los datasets: {e}")
-
-    # Handle conversion from USD to EUR
-    df_eur['Tipo_Cambio_EUR'] = 1 / df_eur['Tipo_Cambio_EUR']
-
-    df_pen = extract_year_month_from_date(df_pen)
-    df_eur = extract_year_month_from_date(df_eur)
-
-    merged_data = pd.merge(df_pen, df_eur, on=['Mes', 'Año'], how='outer')
-    return merged_data
-
 class CoincidenciaBuscadorFinal:
     def __init__(self, dataset_entrada, dataset_busqueda, columna_verificacion=None):
         self.dataset_entrada = dataset_entrada
@@ -296,6 +349,8 @@ def inmovilizadosConverted(df_inmovilizados, df_criticos):
     # Etiquetar como 'inmovilizado' si los días inmovilizados son >= 180 y el tipo de repuesto es "NO CRITICO"
     condition = (df_inmovilizados["Dias Inmovilizados"] >= 180) & (df_inmovilizados["Tipo de repuesto"] == "NO CRITICO")
     df_inmovilizados["Estado Inmovilizado"] = np.where(condition, "inmovilizado", "")
+    # Eliminar valores duplicados basados en todas las columnas
+    df_inmovilizados.drop_duplicates(inplace=True)
     return df_inmovilizados
 
 def vectorized_process_material(df, columns):
@@ -342,12 +397,19 @@ def set_column_dtypes(data, column_type_mapping):
                     data[column_name] = data[column_name].astype(str)
     return data
 
-def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE,df_inmovilizados,df_criticos):
+def process_dataframes_for_join(df_ME5A,
+                                df_ZMM621_fechaAprobacion,
+                                df_IW38, 
+                                df_ME2N_OC,
+                                df_ZMB52,
+                                df_MCBE,df_inmovilizados,
+                                df_criticos
+                                ):
     """Prepara DataFrames para las operaciones de join."""
     column_types = {
         'Fecha de solicitud': 'datetime64[ns]',
         'Fecha de reg. Factura': 'datetime64[ns]',
-        'Fecha de HES/EM': 'datetime64[ns]',
+        'Fecha de registro.1': 'datetime64[ns]',
         'Fecha contable': 'datetime64[ns]',
         'Fecha de aprobación de la orden de compr': 'datetime64[ns]',
         'Fecha documento': 'datetime64[ns]',
@@ -368,6 +430,7 @@ def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_
     'Indicador de Liberación': 'Indicador liberación',
     'ESTRATÉGIA DE LIBERACIÓN':'Estrategia liberac.',
     'Numero de orden':'Orden de mantenimiento',
+    
     }
     
     def standardize_columns_for_dataframe(df, column_mapping):
@@ -388,11 +451,19 @@ def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_
     "CTICSER": "JEF-MG01",
     "JPACCOC": "JEF-EM01",
     "ARADOP": "JEF-PL01",
-    "MMELGARN":"JEF-MG01"
+    "MMELGARN":"JEF-MG01",
+    "MMAGOB":"JEF-MG01",
+    "PPAREDEST":"",
+    "JDELGADOCH":"",
+    "GLUNAR":"",
+    "331_TECCOMUN":"",
     }
     
-    corregir_solicitantes_vectorizado(df_ME5A,lista_maestra_dict)
-    
+    # Corrigiendo la columna por defecto 'Solicitante'
+
+    corregir_solicitantes_vectorizado(df_ME5A, lista_maestra_dict,'Solicitante')
+    corregir_solicitantes_vectorizado(df_ZMM621_fechaAprobacion,lista_maestra_dict,'Solicitante de la solicitud pedido')
+    corregir_solicitantes_vectorizado(df_ME2N_OC,lista_maestra_dict,'Solicitante')
     
     df_ZMB52 = df_ZMB52.pivot_table(
         index=['Material'],
@@ -404,7 +475,15 @@ def process_dataframes_for_join(df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_
     vectorized_process_material(df_ZMB52, cols_to_process)
     vectorized_process_material(df_ME5A, cols_to_process)
     
+    # Se crean versiones procesadas de ciertos DataFrames para usar en la fusión
+    df_ZMM621_OCompras = create_ZMM621_COMODIN_OC_unique(df_ZMM621_fechaAprobacion)
+    df_ZMM621_OMant = create_ZMM621_Orden_unique(df_ZMM621_fechaAprobacion)
+    df_ZMM621_HES_HEM = create_ZMM621_COMODIN_OC_HES_HEM(df_ZMM621_fechaAprobacion)
+    
+    cols_to_process=['Orden']
+    vectorized_process_material(df_ZMM621_OMant,cols_to_process)
+    vectorized_process_material(df_IW38,cols_to_process)
+    
     df_inmovilizados_converted = inmovilizadosConverted(df_inmovilizados,df_criticos)
     
-    
-    return df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_inmovilizados_converted, df_criticos
+    return df_ME5A, df_ZMM621_fechaAprobacion, df_IW38, df_ME2N_OC, df_ZMB52, df_MCBE, df_inmovilizados_converted, df_criticos,df_ZMM621_OCompras,df_ZMM621_OMant,df_ZMM621_HES_HEM

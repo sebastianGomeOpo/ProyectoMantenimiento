@@ -119,17 +119,12 @@ def vectorized_calculate_days_difference(df):
 
 
 def vectorized_calculate_date_difference(df):
-    # print("Entrando a vectorized_calculate_date_difference...")
-    # print(f"Número de filas al inicio: {len(df)}")
-
     df['Fecha de OC'] = pd.to_datetime(df['Fecha de OC'], errors='coerce')
     df['Fecha de SOLPED'] = pd.to_datetime(df['Fecha de SOLPED'], errors='coerce')
 
     df['DEMORA EN GENERAR OC (DIAS)'] = None
 
     mask = (df['TIPO COMPROMETIDO SUGERENCIA'].isin(["SERV. POR FINALIZAR", "COMPRA POR LLEGAR"])) & (df['Indicador de borrado Orden de Compra'] == "")
-
-    # print(f"Número de filas que cumplen con la máscara: {mask.sum()}")
 
     df.loc[mask, 'DEMORA EN GENERAR OC (DIAS)'] = np.where(
         pd.isnull(df.loc[mask, 'Fecha de OC']) & pd.isnull(df.loc[mask, 'Fecha de SOLPED']), "",
@@ -167,125 +162,78 @@ def costoComprasPorRetirar(df):
 
 def calculate_additional_columns(joined_data, df_tipos_cambio,df_inmovilizados_converted,df_criticos):
     """Calculate and add new columns based on the provided logic."""
+    def print_rows(df, operation):
+        print(f"----[ {operation} ]----")
+        print(f"Current number of rows: {df.shape[0]}")
+        print("---------------------------")
+        
+    print_rows(joined_data, "Start")
     
-    # start_time = time.time()
-    
-    # Estado contable
     joined_data['Estado contable'] = vectorized_calcular_estado_contable(joined_data)
-    # print("Time for 'Estado contable':", time.time() - start_time, "seconds")
-    # start_time = time.time()
-
     # Indicador de borrado SOLPED
     joined_data['Indicador de borrado SOLPED'] = np.where(joined_data['Indicador de borrado SOLPED'] == 'True',
                                                           'SOLPED BORRADA ', '')
-    # print("Time for 'Indicador de borrado SOLPED':", time.time() - start_time, "seconds")
-    # start_time = time.time()
-
     # Indicador de borrado Orden de Compra
     joined_data['Indicador de borrado Orden de Compra'] = np.where(
         joined_data['Indicador de borrado Orden de Compra'] == 'L', 'OC.BORRADA', '')
-    # print("Time for 'Indicador de borrado Orden de Compra':", time.time() - start_time, "seconds")
-    # start_time = time.time()
-
 
     joined_data['TIPO'] = np.where(joined_data['Material'].isna() | joined_data['Material'].isin(['', 'nan']),
                                    'SERVICIO', 'COMPRA')
-    # print("Time for 'TIPO':", time.time() - start_time, "seconds")
-    # start_time = time.time()
-
     # Por entregar (STATUS)
     mask = joined_data['Por entregar (cantidad)'].isna() | joined_data['Por entregar (cantidad)'].isin(['', 'nan']) | (
                 joined_data['Por entregar (cantidad)'] > 0)
     joined_data['Por entregar (STATUS)'] = np.where(mask, 'PENDIENTE', 'CONCLUIDO')
-    # print("Time for 'Por entregar (STATUS)':", time.time() - start_time, "seconds")
-    # start_time = time.time()
 
     # PENDIENTE DE LIBERACIÓN DE OC
     joined_data['PENDIENTE DE LIBERACIÓN DE OC'] = vectorized_calculate_status(joined_data)
-    # print("Time for 'PENDIENTE DE LIBERACIÓN DE OC':", time.time() - start_time, "seconds")
-    # start_time = time.time()
 
     joined_data['TIPO COMPROMETIDO SUGERENCIA'] = vectorized_tipoCromprometido(joined_data)
-    # print("Time for 'TIPO COMPROMETIDO SUGERENCIA':", time.time() - start_time, "seconds")
-    # start_time = time.time()
     
     # DEMORA EN GENERAR OC 
     # vectorized_calculate_date_difference
     joined_data = vectorized_calculate_date_difference(joined_data)
-    # print("Time for 'vectorized_calculate_date_difference':", time.time() - start_time, "seconds")
-    # start_time = time.time()
 
     # DEMORA EN LIBERACIONES DE OC
     joined_data = vectorized_calculate_days_difference(joined_data)
-    # print("Time for 'DEMORA EN LIBERACIONES DE OC':", time.time() - start_time, "seconds")
-    # start_time = time.time()
 
     # Año OC
     joined_data['Año OC'] = pd.to_datetime(joined_data['Fecha de OC']).dt.year
-    # print("Time for 'Año OC':", time.time() - start_time, "seconds")
-    # start_time = time.time()
 
     # Mes OC
     joined_data['Mes OC'] = pd.to_datetime(joined_data['Fecha de OC']).dt.month
-    # print("Time for 'Mes OC':", time.time() - start_time, "seconds")
-    # start_time = time.time()
-
+    
+    print_rows(joined_data, "Before merging with df_tipos_cambio")
     # Merging with df_tipos_cambio
     joined_data = pd.merge(joined_data, df_tipos_cambio, left_on=['Año OC', 'Mes OC'], right_on=['Año', 'Mes'],
                            how='left')
-    # print("Time for merging with df_tipos_cambio:", time.time() - start_time, "seconds")
-    # start_time = time.time()
+    print_rows(joined_data, "After merging with df_tipos_cambio")
 
     # Tipo de Cambio
     joined_data['Tipo de Cambio'] = vectorized_get_tipo_cambio(joined_data)
-    # print("Time for 'Tipo de Cambio':", time.time() - start_time, "seconds")
-    # start_time = time.time()
 
     # Converting Precio neto
     joined_data['Precio neto'] = pd.to_numeric(joined_data['Precio neto'], errors='coerce')
-    # print("Time for converting 'Precio neto':", time.time() - start_time, "seconds")
-    # start_time = time.time()
 
     # Converting Tipo de Cambio
     joined_data['Tipo de Cambio'] = pd.to_numeric(joined_data['Tipo de Cambio'], errors='coerce')
-    # print("Time for converting 'Tipo de Cambio':", time.time() - start_time, "seconds")
-    # start_time = time.time()
 
     # Precio Convertido Dolares
     joined_data['Precio Convertido Dolares'] = vectorized_convertir_moneda(joined_data)
-    # print("Time for 'Precio Convertido Dolares':", time.time() - start_time, "seconds")
-    # start_time = time.time()
 
     # Dropping columns
     joined_data = joined_data.drop(columns=['Tipo_Cambio_PEN', 'Tipo_Cambio_EUR', 'Año', 'Mes'])
     # print("Time for dropping columns:", time.time() - start_time, "seconds")
     
+    print_rows(joined_data, "Before costoComprasPorRetirar")
     joined_data = costoComprasPorRetirar(joined_data)
-    
-    # Reemplazar NaNs en la columna 'Material' de ambos DataFrames
-    joined_data['Material'].fillna("Unknown", inplace=True)
-    df_criticos['Código SAP.'].fillna("Unknown",inplace = True)
-    
-    buscadorCriticos = CoincidenciaBuscadorFinal(joined_data, df_criticos)
-    joined_data = buscadorCriticos.buscar_coincidencia('Material','Código SAP.','Critico', 
-                                                        'Material Critico?')
-    
-    
-    df_inmovilizados_converted['Material'].fillna("Unknown", inplace=True)
+    print_rows(joined_data, "After costoComprasPorRetirar")
     
     # Verificación de duplicados en df_inmovilizados_converted antes del merge
     total_rows = df_inmovilizados_converted.shape[0]
     unique_material_values = df_inmovilizados_converted['Material'].nunique()
     if total_rows != unique_material_values:
         print(f"Hay {total_rows - unique_material_values} valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
-            #df_inmovilizados_converted.drop_duplicates(subset='Material', inplace=True)
-            # print("Valores duplicados eliminados.")
     else:
         print("No hay valores duplicados en la columna 'Material' de df_inmovilizados_converted.")
-    # print(f"Rows after final left_join:{joined_data.shape[0]}")
     
-    # Realizar el merge
-    joined_data = joined_data.merge(df_inmovilizados_converted[['Material', 'Estado Inmovilizado', 'Dias Inmovilizados']], 
-                                    on='Material', 
-                                    how='left')
     return joined_data
